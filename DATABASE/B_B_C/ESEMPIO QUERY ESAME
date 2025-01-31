@@ -1,0 +1,56 @@
+--Restituire l'elenco degli artisti (deceduti/viventi) che sono stati scelti nella creazioe di storie. Ordinare il risultato in ordine crescente per numero di volte in cui, un artista, compare nelle storie (perchè selezionato in opere che compongono una storia). Riportare la durata (AVG(TimeStampFine-TimeStampInizio)) in minuti media delle storie.
+SELECT opera.artista, COUNT(*) AS num_storie, AVG((storia.Fine - storia.Inizio)/60) AS durata_media
+FROM storia
+INNER JOIN opera ON storia.Titolo_1 = opera.titolo OR storia.Titolo_2 = opera.titolo OR storia.Titolo_3 = opera.titolo
+GROUP BY opera.artista
+ORDER BY num_storie ASC;
+
+
+--Selezionare tutte le storie degli utenti di età compresa tra [35<=x<=50] anni (estremi inclusi) che contengono almeno 2 opere d'arte (>=2). Ordinare le storie in ordine decrescente di durata della storia (durata =TimeStampFine - TimeStampInizio)
+SELECT s.Titolo_Storia, s.Inizio, s.Fine, u.email, u.data_nascita, COUNT(*) AS num_opere, TIMESTAMPDIFF(MONTH, s.Inizio, s.Fine) AS durata
+FROM Storia AS s
+JOIN Utente AS u ON s.Proprietario = u.email
+WHERE u.data_nascita BETWEEN '1973-07-14' AND '1988-07-14' AND
+      (SELECT COUNT(*) FROM Opera WHERE Titolo_Storia = s.Titolo_Storia) >= 2
+GROUP BY s.Titolo_Storia
+HAVING num_opere >= 2
+ORDER BY durata DESC;
+
+--Restituire nome, cognome e età (in anni) dei curatori che NON hanno commentato almeno 4 storie di utenti di età compresa tra [20<=x<=35] anni (estremi inclusi). Ordinare il risultato per numero decrescente di commenti.
+SELECT u.nome, u.cognome, TIMESTAMPDIFF(YEAR, u.data_nascita, CURDATE()) AS eta, COUNT(c.Utente) AS num_commenti
+FROM Utente AS u
+LEFT JOIN commento_Storia AS c ON u.email = c.Utente
+WHERE u.curatore = true AND u.email NOT IN (
+    SELECT DISTINCT c.Utente
+    FROM commento_Storia AS c
+    JOIN Storia AS s ON c.Storia = s.Titolo_Storia
+    JOIN Utente AS u ON s.Proprietario = u.email
+    WHERE u.data_nascita BETWEEN '1988-07-14' AND '2003-07-14'
+    GROUP BY c.Utente
+    HAVING COUNT(*) >= 4
+)
+GROUP BY u.email
+HAVING COUNT(c.Utente) < 4 OR COUNT(c.Utente) IS NULL
+ORDER BY num_commenti DESC;
+
+--Restituire le storie che sono state create da utenti di età compresa tra [25<=x<=40] anni (estremi inclusi) CHE NON SONO curatori ma che hanno ricevuto commenti solo da curatori. Ordinare il risultato in ordine decrescente per durata della storia (AVG(TimeStampFine-TimeStampInizio))
+SELECT Storia, AVG(TimeStampFine - TimeStampInizio) AS durata_media
+FROM Commenta_Storia
+INNER JOIN utente ON Commenta_Storia.Utente = utente.email
+WHERE utente.ruolo != 'curatore' 
+AND utente.data_nascita <= '2003-07-14' 
+AND utente.data_nascita >= '1986-07-14' 
+AND Storia NOT IN (
+    SELECT DISTINCT Commenta_Storia.Storia 
+    FROM Commenta_Storia 
+    INNER JOIN utente ON Commenta_Storia.Utente = utente.email 
+    WHERE utente.ruolo != 'curatore' 
+    AND Commenta_Storia.Utente NOT IN (
+        SELECT DISTINCT Utente 
+        FROM Commenta_Storia 
+        INNER JOIN utente ON Commenta_Storia.Utente = utente.email 
+        WHERE utente.ruolo = 'curatore'
+    )
+)
+GROUP BY Storia
+ORDER BY durata_media DESC
